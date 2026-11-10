@@ -46,3 +46,5 @@ Remaining limits: Docker image build/runtime on the target host and actual devic
 正常请求验收：独立HTTPS入口以候选证书作为信任根并校验主机名；正常公网HTTPS片源/媒体由候选的默认TLS证书校验处理，无公网漏洞探测。登录、HLS、Range206、提前关闭媒体body、关闭后Range读取通过。浏览器上下文接受独立自签候选证书（该步骤不是公信CA验证），实际影片1920×800，4.5秒内解码帧27→135、时间1.009→5.525；暂停/恢复与AbortController取消通过。证据media-results.json/browser-results.json。
 
 已在候选容器/端口上实际演练：原2.21.0镜像→HTTPS夹具登录成功→恢复修正候选镜像→HTTPS夹具登录成功。生产容器ID、镜像、启动时间、127.0.0.1:18080绑定完全不变，证据rollback-rehearsal.json。恢复目标仍是原生产digest，不恢复旧fork。没有生产切换或部署。该结果替代上文“目标主机尚未构建/媒体解码未验收”的历史限制；实际iPhone真机与正式生产发布仍未执行。
+
+干净最终检出发现Docker构建日志含CR进度字符，经文本上传后被规范化而造成build-final单项哈希失配。现明确将该文本日志规范为LF，再按实际最终字节重算全部清单，并从新的最终PR检出重跑prepare；未跳过哈希检查。
