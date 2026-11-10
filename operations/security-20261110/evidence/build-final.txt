@@ -1,0 +1,52 @@
+
+> libretv@2.21.0 build
+> next build
+
+   ▲ Next.js 15.5.26
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 19.7s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/20) ...
+   Generating static pages (5/20) 
+   Generating static pages (10/20) 
+   Generating static pages (15/20) 
+ ✓ Generating static pages (20/20)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ○ /                                    10.9 kB         235 kB
+├ ○ /_not-found                            992 B         103 kB
+├ ○ /about                               2.65 kB         223 kB
+├ ƒ /api/auth                              167 B         103 kB
+├ ƒ /api/bangumi/calendar                  167 B         103 kB
+├ ƒ /api/detail                            167 B         103 kB
+├ ƒ /api/douban                            167 B         103 kB
+├ ƒ /api/hot-list                          167 B         103 kB
+├ ƒ /api/live/epg                          167 B         103 kB
+├ ƒ /api/live/playlist                     167 B         103 kB
+├ ƒ /api/live/probe                        167 B         103 kB
+├ ƒ /api/live/stream                       167 B         103 kB
+├ ƒ /api/live/stream/[url]                 167 B         103 kB
+├ ƒ /api/proxy                             167 B         103 kB
+├ ƒ /api/proxy/[url]                       167 B         103 kB
+├ ƒ /api/publish                           167 B         103 kB
+├ ƒ /api/quality                           167 B         103 kB
+├ ƒ /api/search                            167 B         103 kB
+├ ƒ /api/source-list                       167 B         103 kB
+├ ƒ /api/source/test                       167 B         103 kB
+├ ƒ /api/status                            167 B         103 kB
+├ ○ /live                                19.3 kB         240 kB
+├ ○ /manifest.webmanifest                  167 B         103 kB
+└ ○ /watch                               11.3 kB         218 kB
++ First Load JS shared by all             102 kB
+  ├ chunks/255-19006f0c93e97bab.js       46.1 kB
+  ├ chunks/4bd1b696-21f374d1156f834a.js  54.2 kB
+  └ other shared chunks (total)          2.08 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

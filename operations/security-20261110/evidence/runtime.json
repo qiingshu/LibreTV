@@ -1,0 +1,34 @@
+[
+  {
+    "name": "candidate version",
+    "passed": true
+  },
+  {
+    "name": "unauthenticated search",
+    "passed": true
+  },
+  {
+    "name": "fixture login",
+    "passed": true
+  },
+  {
+    "name": "authenticated session",
+    "passed": true
+  },
+  {
+    "name": "normal private proxy blocked before request",
+    "passed": true
+  },
+  {
+    "name": "LIVE unset private request blocked before request",
+    "passed": true
+  },
+  {
+    "name": "candidate page",
+    "passed": true
+  },
+  {
+    "name": "logout contract",
+    "passed": true
+  }
+]

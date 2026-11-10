@@ -1,0 +1,15 @@
+
+> libretv@2.21.0 test
+> vitest run --maxWorkers=1 --minWorkers=1 src/lib/ssrf-public-fixture.test.ts
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /root/Documents/Codex/2026-11-10/a-b-c-pr-fork-a/libretv-candidate
+
+ ✓ src/lib/ssrf-public-fixture.test.ts (1 test) 40ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  20:13:09
+   Duration  568ms (transform 87ms, setup 0ms, collect 119ms, tests 40ms, environment 0ms, prepare 71ms)
+

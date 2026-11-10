@@ -1,0 +1,4 @@
+
+> libretv@2.21.0 typecheck
+> tsc --noEmit
+

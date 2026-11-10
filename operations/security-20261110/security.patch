@@ -1,0 +1,523 @@
+diff --git a/package-lock.json b/package-lock.json
+index 153031a..a8f377b 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -20,7 +20,8 @@
+         "next": "^15.1.0",
+         "react": "^19.0.0",
+         "react-dom": "^19.0.0",
+-        "zustand": "^5.0.2"
++        "zustand": "^5.0.2",
++        "undici": "6.21.1"
+       },
+       "devDependencies": {
+         "@types/node": "^22.10.0",
+@@ -7890,6 +7891,15 @@
+           "optional": true
+         }
+       }
++    },
++    "node_modules/undici": {
++      "version": "6.21.1",
++      "resolved": "https://registry.npmjs.org/undici/-/undici-6.21.1.tgz",
++      "integrity": "sha512-q/1rj5D0/zayJB2FraXdaWxbhWiNKDvu8naDT2dl1yTlvJp4BLtOcp2a5BvgGNQpYYJzau7tf1WgKv3b+7mqpQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=18.17"
++      }
+     }
+   }
+ }
+diff --git a/package.json b/package.json
+index 3e01b2e..3d79d19 100644
+--- a/package.json
++++ b/package.json
+@@ -24,7 +24,8 @@
+     "next": "^15.1.0",
+     "react": "^19.0.0",
+     "react-dom": "^19.0.0",
+-    "zustand": "^5.0.2"
++    "zustand": "^5.0.2",
++    "undici": "6.21.1"
+   },
+   "devDependencies": {
+     "@types/node": "^22.10.0",
+diff --git a/src/lib/fetch-utils.test.ts b/src/lib/fetch-utils.test.ts
+index 0d79a26..4f3a2a7 100644
+--- a/src/lib/fetch-utils.test.ts
++++ b/src/lib/fetch-utils.test.ts
+@@ -54,4 +54,22 @@ describe('fetchUpstream 安全跳转', () => {
+     ));
+     await expect(fetchUpstream(PUBLIC_URL)).rejects.toThrow(/重定向次数过多/);
+   });
++
++  it('底层连接解析到私网 IP 时转换抛出友好错误 (连接目标被拒绝)', async () => {
++    const err = Object.assign(new Error('fetch failed'), {
++      cause: { code: 'ERR_SSRF_BLOCKED', message: '目标地址解析到私有/保留网络 (127.0.0.1)' },
++    });
++    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(err)));
++    await expect(fetchUpstream(PUBLIC_URL)).rejects.toThrow(/连接目标被拒绝: 目标地址解析到私有\/保留网络/);
++  });
++
++  it('safeRedirects 为 false 时，底层连接解析到私网 IP 也会转换抛出友好错误', async () => {
++    const err = Object.assign(new Error('fetch failed'), {
++      cause: { code: 'ERR_SSRF_BLOCKED', message: '目标地址解析到私有/保留网络 (127.0.0.1)' },
++    });
++    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(err)));
++    await expect(fetchUpstream(PUBLIC_URL, { safeRedirects: false })).rejects.toThrow(
++      /连接目标被拒绝: 目标地址解析到私有\/保留网络/
++    );
++  });
+ });
+diff --git a/src/lib/fetch-utils.ts b/src/lib/fetch-utils.ts
+index 8a40faf..ce6571f 100644
+--- a/src/lib/fetch-utils.ts
++++ b/src/lib/fetch-utils.ts
+@@ -1,6 +1,6 @@
+ /** 服务端上游请求工具：超时、重试、安全跳转、JSON 解析 */
+ 
+-import { checkLiveUrlAllowed, checkUpstreamAllowed } from './ssrf';
++import { checkLiveUrlAllowed, checkUpstreamAllowed, runWithSSRFProtection } from './ssrf';
+ 
+ export interface FetchOptions extends RequestInit {
+   timeoutMs?: number;
+@@ -41,6 +41,23 @@ export interface SafeRedirectOptions {
+   headerTimeoutMs?: number;
+ }
+ 
++/** 归一化连接层 SSRF 拦截错误为用户友好提示 */
++function normalizeSSRFError(err: unknown): never {
++  if (
++    err &&
++    typeof err === 'object' &&
++    'cause' in err &&
++    err.cause &&
++    typeof err.cause === 'object' &&
++    'code' in err.cause &&
++    (err.cause as { code?: string }).code === 'ERR_SSRF_BLOCKED'
++  ) {
++    const cause = err.cause as { message?: string };
++    throw new Error(`连接目标被拒绝: ${cause.message || '目标地址被拒绝'}`);
++  }
++  throw err;
++}
++
+ /**
+  * 手动逐跳跟随重定向，每一跳重新执行 SSRF 校验。
+  * 不能用 redirect:'follow'——预检之后 fetch 自动跟随的 3xx 可把请求
+@@ -52,33 +69,37 @@ export async function fetchWithSafeRedirects(
+   options: SafeRedirectOptions = {}
+ ): Promise<FetchResult> {
+   const { allowPrivate = false, headerTimeoutMs } = options;
+-  let current = url;
+-  // headerTimeout 超时即 abort 内部 controller；外部 signal（调用方死线/客户端断开）链入同一 controller
+-  const controller = new AbortController();
+-  if (init.signal) {
+-    if (init.signal.aborted) controller.abort(init.signal.reason);
+-    else init.signal.addEventListener('abort', () => controller.abort(init.signal?.reason), { once: true });
+-  }
+-  for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
+-    const verdict = allowPrivate
+-      ? await checkLiveUrlAllowed(current)
+-      : await checkUpstreamAllowed(current);
+-    if (!verdict.ok) {
+-      throw new Error(`跳转目标被拒绝: ${verdict.reason}`);
++  return runWithSSRFProtection({ allowPrivate }, async () => {
++    let current = url;
++    // headerTimeout 超时即 abort 内部 controller；外部 signal（调用方死线/客户端断开）链入同一 controller
++    const controller = new AbortController();
++    if (init.signal) {
++      if (init.signal.aborted) controller.abort(init.signal.reason);
++      else init.signal.addEventListener('abort', () => controller.abort(init.signal?.reason), { once: true });
+     }
+-    const timer = headerTimeoutMs ? setTimeout(() => controller.abort(), headerTimeoutMs) : null;
+-    let res: Response;
+-    try {
+-      res = await fetch(current, { ...init, signal: controller.signal, redirect: 'manual' });
+-    } finally {
+-      if (timer) clearTimeout(timer);
++    for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
++      const verdict = allowPrivate
++        ? await checkLiveUrlAllowed(current)
++        : await checkUpstreamAllowed(current);
++      if (!verdict.ok) {
++        throw new Error(`跳转目标被拒绝: ${verdict.reason}`);
++      }
++      const timer = headerTimeoutMs ? setTimeout(() => controller.abort(), headerTimeoutMs) : null;
++      let res: Response;
++      try {
++        res = await fetch(current, { ...init, signal: controller.signal, redirect: 'manual' });
++      } catch (err: unknown) {
++        normalizeSSRFError(err);
++      } finally {
++        if (timer) clearTimeout(timer);
++      }
++      if (!REDIRECT_STATUSES.has(res.status)) return { res, finalUrl: current };
++      const location = res.headers.get('location');
++      if (!location) return { res, finalUrl: current };
++      current = new URL(location, current).href;
+     }
+-    if (!REDIRECT_STATUSES.has(res.status)) return { res, finalUrl: current };
+-    const location = res.headers.get('location');
+-    if (!location) return { res, finalUrl: current };
+-    current = new URL(location, current).href;
+-  }
+-  throw new Error('重定向次数过多');
++    throw new Error('重定向次数过多');
++  });
+ }
+ 
+ export async function fetchUpstream(url: string, options: FetchOptions = {}): Promise<Response> {
+@@ -97,12 +118,18 @@ export async function fetchUpstreamWithMeta(url: string, options: FetchOptions =
+   for (let attempt = 0; attempt <= retries; attempt++) {
+     try {
+       if (!safeRedirects) {
+-        const res = await fetch(url, {
+-          ...init,
+-          signal,
+-          redirect: init.redirect ?? 'follow',
+-        });
+-        return { res, finalUrl: res.url || url };
++        try {
++          const res = await runWithSSRFProtection({ allowPrivate }, () =>
++            fetch(url, {
++              ...init,
++              signal,
++              redirect: init.redirect ?? 'follow',
++            })
++          );
++          return { res, finalUrl: res.url || url };
++        } catch (err: unknown) {
++          normalizeSSRFError(err);
++        }
+       }
+       // 手动逐跳跟随，每一跳重新过 SSRF 校验
+       return await fetchWithSafeRedirects(url, { ...init, signal }, { allowPrivate });
+diff --git a/src/lib/proxy-regression.test.ts b/src/lib/proxy-regression.test.ts
+new file mode 100644
+index 0000000..707317a
+--- /dev/null
++++ b/src/lib/proxy-regression.test.ts
+@@ -0,0 +1,42 @@
++import { afterEach, beforeEach, expect, it, vi } from 'vitest';
++import { POST, GET, DELETE } from '../app/api/auth/route';
++import { handleProxyRequest, handleLiveStreamRequest } from './proxy-handlers';
++vi.mock('./ssrf', async original => ({ ...await original<typeof import('./ssrf')>(), isBlockedByDNS: vi.fn(async () => false) }));
++let cookie = '';
++beforeEach(async () => {
++  vi.stubEnv('PASSWORD', 'isolated-password'); vi.stubEnv('LIVE_ALLOW_PRIVATE', '1');
++  const login = await POST(new Request('http://fixture/api/auth', { method:'POST', body:JSON.stringify({password:'isolated-password'}) }));
++  expect(login.status).toBe(200); cookie=login.headers.get('set-cookie')!.split(';')[0];
++});
++afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
++const request = (authenticated=true) => new Request('http://fixture/api/proxy', {headers:authenticated?{cookie,range:'bytes=0-15'}:{}});
++it('login, session, incorrect password and logout contracts', async () => {
++  expect((await (await GET(request())).json()).verified).toBe(true);
++  expect((await (await GET(request(false))).json()).verified).toBe(false);
++  expect((await POST(new Request('http://fixture/api/auth',{method:'POST',body:JSON.stringify({password:'wrong'})}))).status).toBe(401);
++  expect((await DELETE()).headers.get('set-cookie')).toContain('Max-Age=0');
++});
++it('normal proxy rejects private targets even with live exemption enabled', async () => {
++  const fn=vi.fn(); vi.stubGlobal('fetch',fn);
++  expect((await handleProxyRequest(request(),'http://127.0.0.1/video.ts')).status).toBe(400);
++  expect(fn).not.toHaveBeenCalled();
++});
++it('proxy preserves auth, range and delayed body reading', async () => {
++  expect((await handleProxyRequest(request(false),'https://8.8.8.8/video.ts')).status).toBe(401);
++  const upstream=vi.fn(async (_url:unknown, init?:RequestInit) => {
++    expect((init!.headers as Record<string,string>).Range).toBe('bytes=0-15');
++    return new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('part1'));setTimeout(()=>{c.enqueue(new TextEncoder().encode('part2'));c.close();},20);}}),{status:206,headers:{'content-type':'video/mp2t','content-range':'bytes 0-9/10'}});
++  }); vi.stubGlobal('fetch',upstream);
++  const res=await handleProxyRequest(request(),'https://8.8.8.8/video.ts');
++  expect(res.status).toBe(206); expect(await res.text()).toBe('part1part2'); expect(upstream).toHaveBeenCalledOnce();
++});
++it('manifest playback rewrites segments, encryption key and map through normal proxy', async () => {
++  vi.stubGlobal('fetch',vi.fn(async()=>new Response('#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="key.bin"\n#EXT-X-MAP:URI="init.mp4"\n#EXTINF:6,\nseg.ts\n',{headers:{'content-type':'application/vnd.apple.mpegurl'}})));
++  const res=await handleProxyRequest(request(),'https://8.8.8.8/a/index.m3u8'); const body=await res.text();
++  expect(res.status).toBe(200);expect(body).toContain('/api/proxy?url=');expect(body).toContain('key.bin');expect(body).toContain('seg.ts');
++});
++it('live route retains authentication and explicit live-only exception', async () => {
++  expect((await handleLiveStreamRequest(request(false),'http://127.0.0.1/live.ts')).status).toBe(401);
++  vi.stubGlobal('fetch',vi.fn(async()=>new Response('fixture-live',{headers:{'content-type':'video/mp2t'}})));
++  const res=await handleLiveStreamRequest(request(),'http://127.0.0.1/live.ts');expect(res.status).toBe(200);expect(await res.text()).toBe('fixture-live');
++});
+diff --git a/src/lib/ssrf-isolated.test.ts b/src/lib/ssrf-isolated.test.ts
+new file mode 100644
+index 0000000..4ed66d0
+--- /dev/null
++++ b/src/lib/ssrf-isolated.test.ts
+@@ -0,0 +1,58 @@
++import { afterEach, describe, expect, it, vi } from 'vitest';
++import http from 'node:http';
++import dns from 'node:dns/promises';
++import { lookup } from 'node:dns';
++vi.mock('node:dns', async (original) => {
++  const actual = await original<typeof import('node:dns')>();
++  return { ...actual, lookup: vi.fn(actual.lookup) };
++});
++import { runWithSSRFProtection } from './ssrf';
++import { fetchUpstream, fetchWithSafeRedirects } from './fetch-utils';
++afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
++async function fixture(fn: (url: string, hits: string[]) => Promise<void>) {
++  const hits: string[] = [];
++  const server = http.createServer((req, res) => {
++    hits.push(req.url!);
++    if (req.url === '/redirect') { res.writeHead(302, { location: '/stream' }); res.end(); return; }
++    res.writeHead(200, { 'content-type': 'video/mp2t' });
++    res.write('first-'); setTimeout(() => res.end('last'), 30);
++  });
++  await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
++  try { await fn(`http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`, hits); }
++  finally { server.closeAllConnections(); await new Promise<void>(r => server.close(() => r())); }
++}
++describe('isolated connection and exemption regression', () => {
++  it.each(['127.0.0.1','10.0.0.1','192.168.0.1','172.16.0.1','169.254.169.254','[::1]','[fd00::1]','[fe80::1]','[fe90::1]','[febf::1]','100.127.255.1','0.1.2.3','224.0.0.1','[0:0:0:0:0:0:0:1]','[::ffff:127.0.0.1]'])('blocks literal %s before a socket', async host => {
++    await expect(runWithSSRFProtection({}, () => fetch(`http://${host}:18099/`))).rejects.toMatchObject({ cause: { code: 'ERR_SSRF_BLOCKED' } });
++  });
++  it('detects rebinding between public preflight and private connection DNS', async () => {
++    await fixture(async (url, hits) => {
++      vi.spyOn(dns, 'lookup').mockResolvedValue([{ address: '8.8.8.8', family: 4 }] as never);
++      vi.mocked(lookup).mockImplementation(((_host: unknown, _opts: unknown, cb: (err: null, addresses: unknown[]) => void) => cb(null, [{ address: '127.0.0.1', family: 4 }])) as never);
++      await expect(fetchUpstream(url.replace('127.0.0.1', 'rebind.invalid'))).rejects.toThrow(/连接目标被拒绝/);
++      expect(hits).toEqual([]);
++    });
++  });
++  it('LIVE flag absent does not turn live intent into a connection exemption', async () => {
++    vi.stubEnv('LIVE_ALLOW_PRIVATE', '');
++    await fixture(async (url, hits) => {
++      await expect(runWithSSRFProtection({ allowPrivate: true }, () => fetch(url))).rejects.toMatchObject({ cause: { code: 'ERR_SSRF_BLOCKED' } });
++      await expect(fetchUpstream(url, { allowPrivate: true, safeRedirects: false })).rejects.toThrow(/连接目标被拒绝/);
++      expect(hits).toEqual([]);
++    });
++  });
++  it('live exception supports redirect and delayed stream; strict requests cannot reuse its pool', async () => {
++    vi.stubEnv('LIVE_ALLOW_PRIVATE', '1');
++    await fixture(async (url, hits) => {
++      const { res, finalUrl } = await fetchWithSafeRedirects(url + '/redirect', {}, { allowPrivate: true });
++      expect(finalUrl).toBe(url + '/stream'); expect(await res.text()).toBe('first-last');
++      await expect(runWithSSRFProtection({}, () => fetch(url + '/normal'))).rejects.toMatchObject({ cause: { code: 'ERR_SSRF_BLOCKED' } });
++      await expect(fetchUpstream(url + '/normal')).rejects.toThrow(/跳转目标被拒绝/);
++      expect(hits).toEqual(['/redirect', '/stream']);
++    });
++  });
++  it('mixed public/private DNS answer is rejected even when public answer is first', async () => {
++    vi.mocked(lookup).mockImplementation(((_host: unknown, _opts: unknown, cb: (err: null, addresses: unknown[]) => void) => cb(null, [{ address: '8.8.8.8', family: 4 }, { address: '::1', family: 6 }])) as never);
++    await expect(runWithSSRFProtection({}, () => fetch('http://mixed.invalid/'))).rejects.toMatchObject({ cause: { code: 'ERR_SSRF_BLOCKED' } });
++  });
++});
+diff --git a/src/lib/ssrf-public-fixture.test.ts b/src/lib/ssrf-public-fixture.test.ts
+new file mode 100644
+index 0000000..4495eae
+--- /dev/null
++++ b/src/lib/ssrf-public-fixture.test.ts
+@@ -0,0 +1,24 @@
++import { expect, it, vi } from 'vitest';
++import http from 'node:http';
++// Validate real safeLookup callback, then route the validated public address to OUR local fixture.
++// This prevents this positive test from needing any public network access.
++vi.mock('node:dns', async original => ({ ...await original<typeof import('node:dns')>(), lookup: (_h:unknown,_o:unknown,cb:(e:null,a:unknown[])=>void)=>cb(null,[{address:'8.8.8.8',family:4}]) }));
++vi.mock('undici', async original => {
++  const actual=await original<typeof import('undici')>();
++  return {...actual,buildConnector:(options:Record<string,unknown>)=>actual.buildConnector({...options,lookup:((host: string, opts: unknown, cb: (err: Error | null, address?: unknown, family?: number) => void)=>{
++    (options.lookup as (host: string, opts: unknown, cb: (err: Error | null) => void) => void)(host,opts,(err:Error|null)=>{
++      if(err)return cb(err);
++      return cb(null,opts && (opts as {all?:boolean}).all ? [{address:'127.0.0.1',family:4}] : '127.0.0.1',4);
++    });
++  }) as never})};
++});
++import { runWithSSRFProtection } from './ssrf';
++it('strict public DNS lookup succeeds and delayed response remains readable after agent.close',async()=>{
++  const server=http.createServer((_req,res)=>{res.write('first');setTimeout(()=>res.end('-last'),20);});
++  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
++  try{
++    const port=(server.address() as import('node:net').AddressInfo).port;
++    const res=await runWithSSRFProtection({},()=>fetch(`http://public-fixture.invalid:${port}/`));
++    expect(res.status).toBe(200);expect(await res.text()).toBe('first-last');
++  } finally {server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
++});
+diff --git a/src/lib/ssrf.ts b/src/lib/ssrf.ts
+index 9c00d1f..3cdec7c 100644
+--- a/src/lib/ssrf.ts
++++ b/src/lib/ssrf.ts
+@@ -1,4 +1,8 @@
++import { AsyncLocalStorage } from 'node:async_hooks';
++import type { LookupAddress } from 'node:dns';
++import { lookup as callbackLookup } from 'node:dns';
+ import dns from 'node:dns/promises';
++import { Agent, buildConnector } from 'undici';
+ 
+ /** 去掉 URL.hostname 对 IPv6 附加的方括号（"[::1]" → "::1"） */
+ function stripBrackets(host: string): string {
+@@ -23,13 +27,17 @@ function toIPv4(ip: string): string | null {
+ /** 判断 IP 是否为私有/回环/链路本地/保留地址（SSRF 防护） */
+ export function isPrivateIP(ip: string): boolean {
+   let v = stripBrackets(ip.trim());
++  if (v.includes(':')) {
++    try { v = stripBrackets(new URL(`http://[${v}]/`).hostname); } catch { /* reject malformed URLs in caller */ }
++  }
+   v = toIPv4(v) ?? v;
+-  if (/^(127\.|0\.0\.0\.0$|::1$|::$|fe80:|fc|fd)/i.test(v)) return true;
++  if (/^(127\.|0\.|::1$|::$|fe[89ab][0-9a-f]:|fc|fd)/i.test(v)) return true;
+   if (v.startsWith('10.')) return true;
+   if (v.startsWith('192.168.')) return true;
+   if (/^172\.(1[6-9]|2\d|3[01])\./.test(v)) return true;
+   if (v.startsWith('169.254.')) return true; // 链路本地（含云元数据 169.254.169.254）
+-  if (v.startsWith('100.64.')) return true; // CGNAT
++  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(v)) return true; // CGNAT /10
++  if (/^(22[4-9]|23\d|24\d|25[0-5])\./.test(v) || /^ff/i.test(v)) return true; // multicast/reserved
+   if (v.startsWith('192.0.0.')) return true; // 协议分配块
+   return false;
+ }
+@@ -108,3 +116,152 @@ export async function checkLiveUrlAllowed(urlString: string): Promise<UpstreamVe
+   if (allowLivePrivate()) return { ok: true };
+   return checkUpstreamAllowed(urlString);
+ }
++
++
++export interface SSRFProtectionContext {
++  active: boolean;
++  allowPrivate?: boolean;
++}
++
++const ssrfStorage = new AsyncLocalStorage<SSRFProtectionContext>();
++
++/**
++ * 创建受连接级 SSRF / DNS Rebinding 防护的专用 undici Agent。
++ *
++ * 核心机制（解决 #941）：
++ * 1. 独立 Dispatcher：避免复用全局或其他作用域的连接池，杜绝通过已有的 keep-alive socket 绕过连接层校验；
++ * 2. 连接前检查：拦截目标为字面量私网 IP 及黑名单主机名（如 127.0.0.1、localhost）；
++ * 3. 连接时 DNS 校验：通过 safeLookup（使用标准 callback 签名的 node:dns 接口）解析域名，
++ *    只要解析结果包含任何私网/保留 IP，立即抛出 ERR_SSRF_BLOCKED 中断连接，杜绝 DNS Rebinding TOCTOU 绕过；
++ * 4. 禁用连接保活：使用完毕即释放连接，不留复用窗口。
++ */
++export function createSSRFAgent(options: { allowPrivate?: boolean } = {}): Agent {
++  const { allowPrivate = false } = options;
++
++  function safeLookup(
++    hostname: string,
++    opts: unknown,
++    cb: (err: NodeJS.ErrnoException | null, address?: string | LookupAddress[], family?: number) => void
++  ): void {
++    const cleanHost = stripBrackets(hostname);
++    if (!allowPrivate && BLOCKED_HOSTNAMES.has(cleanHost.toLowerCase())) {
++      const blockErr = Object.assign(new Error(`目标主机名在黑名单中 (${hostname})`), {
++        code: 'ERR_SSRF_BLOCKED',
++      });
++      return cb(blockErr, '');
++    }
++
++    callbackLookup(cleanHost, { all: true }, (err, addresses) => {
++      if (err) return cb(err, '');
++      const list = Array.isArray(addresses) ? addresses : [];
++      if (list.length === 0) {
++        return cb(new Error(`未找到主机地址: ${hostname}`), '');
++      }
++      if (!allowPrivate) {
++        for (const item of list) {
++          if (isPrivateIP(item.address)) {
++            const blockErr = Object.assign(new Error(`目标地址解析到私有/保留网络 (${item.address})`), {
++              code: 'ERR_SSRF_BLOCKED',
++            });
++            return cb(blockErr, '');
++          }
++        }
++      }
++
++      const wantAll = opts && typeof opts === 'object' && (opts as { all?: boolean }).all;
++      if (wantAll) {
++        cb(null, list);
++      } else {
++        cb(null, list[0].address, list[0].family);
++      }
++    });
++  }
++
++  const baseConnector = buildConnector({
++    lookup: safeLookup as unknown as (hostname: string, options: import('node:dns').LookupOptions, callback: (err: NodeJS.ErrnoException | null, address: string | import('node:dns').LookupAddress[], family?: number) => void) => void,
++  });
++
++  function ssrfConnect(opts: buildConnector.Options, cb: buildConnector.Callback) {
++    const cleanHost = stripBrackets(opts.hostname || '');
++    if (!allowPrivate) {
++      if (BLOCKED_HOSTNAMES.has(cleanHost.toLowerCase())) {
++        const blockErr = Object.assign(new Error(`目标主机名在黑名单中 (${cleanHost})`), {
++          code: 'ERR_SSRF_BLOCKED',
++        });
++        return cb(blockErr, null);
++      }
++      if (/^\d{1,3}(\.\d{1,3}){3}$/.test(cleanHost) || cleanHost.includes(':')) {
++        if (isPrivateIP(cleanHost)) {
++          const blockErr = Object.assign(new Error(`目标地址属于私有/保留网络 (${cleanHost})`), {
++            code: 'ERR_SSRF_BLOCKED',
++          });
++          return cb(blockErr, null);
++        }
++      }
++    }
++    return baseConnector(opts, cb);
++  }
++
++  return new Agent({
++    connect: ssrfConnect,
++    pipelining: 0,
++    keepAliveTimeout: 1,
++    keepAliveMaxTimeout: 1,
++  });
++}
++
++const GLOBAL_FETCH_WRAPPED = Symbol.for('libretv.ssrf.fetch.wrapped');
++
++/**
++ * 安装安全的 fetch SSRF 防护包装器。
++ * 仅在 runWithSSRFProtection 激活的作用域内生效，自动注入安全专用的 Agent，
++ * 不影响外部全局网络通信，杜绝 monkey-patch net.Socket.prototype 造成的全局副作用。
++ */
++export function installFetchSSRFProtection(): void {
++  const g = globalThis as unknown as Record<symbol, boolean>;
++  if (g[GLOBAL_FETCH_WRAPPED]) return;
++  g[GLOBAL_FETCH_WRAPPED] = true;
++
++  const originalFetch = globalThis.fetch;
++
++  globalThis.fetch = async function ssrfProtectedFetch(
++    input: RequestInfo | URL,
++    init?: RequestInit & { dispatcher?: unknown }
++  ): Promise<Response> {
++    const ctx = ssrfStorage.getStore();
++    if (!ctx || !ctx.active) {
++      return originalFetch(input, init);
++    }
++
++    // 在受保护作用域内，如果未提供专属 dispatcher，自动注入安全专用的 Agent
++    const agent = createSSRFAgent({ allowPrivate: ctx.allowPrivate });
++    try {
++      const res = await originalFetch(input, {
++        ...init,
++        dispatcher: agent,
++      } as RequestInit);
++      // 收到响应后优雅计划关闭 Agent，避免连接池跨请求保留
++      agent.close().catch(() => {});
++      return res;
++    } catch (err) {
++      agent.destroy().catch(() => {});
++      throw err;
++    }
++  };
++}
++
++// 兼容别名
++export const installConnectionSSRFProtection = installFetchSSRFProtection;
++
++// 模块加载时自动安装防护
++installFetchSSRFProtection();
++
++/**
++ * 在受连接级 SSRF / DNS Rebinding 防护的作用域中执行异步请求
++ */
++export function runWithSSRFProtection<T>(
++  options: { allowPrivate?: boolean } = {},
++  fn: () => Promise<T>
++): Promise<T> {
++  return ssrfStorage.run({ active: true, allowPrivate: options.allowPrivate === true && allowLivePrivate() }, fn);
++}

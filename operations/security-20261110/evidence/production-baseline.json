@@ -1,0 +1,100 @@
+{
+  "hostname": "vps-bfd15009",
+  "image_id": "sha256:009fbfba569032ea38efc07b5f7ec51724e0e14a4b7a27a2848774e2323992ca",
+  "repo_digests": [
+    "ghcr.io/librespark/libretv@sha256:009fbfba569032ea38efc07b5f7ec51724e0e14a4b7a27a2848774e2323992ca"
+  ],
+  "revision": "b08c8242d2a3cdb4309b40c58001c69c04593ce1",
+  "mounts": [],
+  "ports": {
+    "8080/tcp": [
+      {
+        "HostIp": "127.0.0.1",
+        "HostPort": "18080"
+      }
+    ]
+  },
+  "user": "nextjs",
+  "cmd": [
+    "node",
+    "server.js"
+  ],
+  "env": {
+    "PASSWORD": {
+      "present": true,
+      "redacted": true
+    },
+    "DEFAULT_SOURCES": {
+      "present": true,
+      "redacted": true
+    },
+    "DEFAULT_RECOMMEND_SOURCE": {
+      "present": true,
+      "redacted": true
+    },
+    "COOKIE_SECURE": "true",
+    "NEXT_TELEMETRY_DISABLED": "1",
+    "NODE_ENV": "production",
+    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "NODE_VERSION": "22.23.4",
+    "YARN_VERSION": "1.22.22",
+    "PORT": "8080",
+    "HOSTNAME": "0.0.0.0"
+  },
+  "files": {
+    "/opt/libretv-trial/compose.yaml": {
+      "sha256": "795aa99feb09b95d8dacc7fa846d402fe2542445d66b13a870d77a29c130e78e",
+      "source": "name: libretv-trial\nservices:\n  web:\n    image: ghcr.io/librespark/libretv:2.21.0\n    restart: unless-stopped\n    ports:\n      - \"127.0.0.1:18080:8080\"\n    env_file: .env\n    environment:\n      NODE_ENV: production\n      COOKIE_SECURE: \"true\"\n      NEXT_TELEMETRY_DISABLED: \"1\"\n    mem_limit: 768m\n    cpus: 1.0\n    security_opt:\n      - no-new-privileges:true\n    logging:\n      driver: json-file\n      options:\n        max-size: \"10m\"\n        max-file: \"3\"\n"
+    },
+    "/etc/nginx/sites-available/libretv-production": {
+      "sha256": "637bd8fbab97763e77c27381779f681a899c65863d8d53d52f1df46cf6cea041",
+      "source": "server {\n listen 80;\n server_name tv.imqing.cc;\n return 301 https://$host$request_uri;\n}\nserver {\n listen 443 ssl http2;\n server_name tv.imqing.cc;\n ssl_certificate /etc/nginx/ssl/tv.imqing.cc/origin.pem;\n ssl_certificate_key /etc/nginx/ssl/tv.imqing.cc/origin.key;\n ssl_protocols TLSv1.2 TLSv1.3;\n access_log syslog:server=unix:/dev/log,tag=libretv_audit libretv_audit;\n location ^~ /api/ {\n  proxy_pass http://127.0.0.1:18080;\n  proxy_http_version 1.1;\n  proxy_set_header Host $host;\n  proxy_set_header X-Forwarded-Proto $scheme;\n  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n  proxy_buffering off;\n  add_header X-LibreTV-Origin \"ovh-libretv-2.21.0\" always;\n  add_header X-LibreTV-Request-ID $request_id always;\n  proxy_read_timeout 300s;\n  proxy_hide_header Cache-Control;\n  add_header Cache-Control \"private, no-store\" always;\n }\n location / {\n  proxy_pass http://127.0.0.1:18080;\n  proxy_http_version 1.1;\n  proxy_set_header Host $host;\n  proxy_set_header X-Forwarded-Proto $scheme;\n  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n  proxy_buffering off;\n  add_header X-LibreTV-Origin \"ovh-libretv-2.21.0\" always;\n  add_header X-LibreTV-Request-ID $request_id always;\n  proxy_read_timeout 300s;\n }\n}\n"
+    },
+    "/etc/nginx/sites-available/libretv-default-deny": {
+      "sha256": "91eed6c53a8f6a886fa3daef884298141e96dd565b13299466dabe55d42c18f6",
+      "source": "server {\n listen 80 default_server;\n listen [::]:80 default_server;\n server_name _;\n return 444;\n}\nserver {\n listen 443 ssl default_server;\n listen [::]:443 ssl default_server;\n server_name _;\n ssl_reject_handshake on;\n return 444;\n}\n"
+    }
+  },
+  "docker_diff": "",
+  "package": {
+    "name": "libretv",
+    "version": "2.21.0",
+    "private": true,
+    "description": "免费在线视频搜索与观看平台（Next.js 重构版）",
+    "license": "AGPL-3.0-or-later",
+    "scripts": {
+      "dev": "next dev -p 8080",
+      "build": "next build",
+      "start": "next start -p 8080",
+      "lint": "eslint src",
+      "typecheck": "tsc --noEmit",
+      "test": "vitest run"
+    },
+    "dependencies": {
+      "@tanstack/react-query": "^5.59.0",
+      "@tanstack/react-virtual": "^3.14.12",
+      "artplayer": "^5.2.3",
+      "dexie": "^4.0.8",
+      "dexie-react-hooks": "^1.1.7",
+      "hls.js": "^1.5.17",
+      "mpegts.js": "^1.8.2",
+      "mux.js": "^6.3.0",
+      "next": "^15.1.0",
+      "react": "^19.0.0",
+      "react-dom": "^19.0.0",
+      "zustand": "^5.0.2"
+    },
+    "devDependencies": {
+      "@types/node": "^22.10.0",
+      "@types/react": "^19.0.0",
+      "@types/react-dom": "^19.0.0",
+      "autoprefixer": "^10.4.20",
+      "eslint": "^9.39.4",
+      "eslint-config-next": "^15.5.25",
+      "postcss": "^8.4.49",
+      "tailwindcss": "^3.4.15",
+      "typescript": "^5.7.2",
+      "vitest": "^2.1.8"
+    }
+  }
+}
