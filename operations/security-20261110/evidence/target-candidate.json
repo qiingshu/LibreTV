@@ -1,0 +1,27 @@
+{
+  "production_container_id": "2f50cd1231f316fbb75bf03ea7714e1d455924a1a434399463ec47a8fd937080",
+  "production_image_id": "sha256:009fbfba569032ea38efc07b5f7ec51724e0e14a4b7a27a2848774e2323992ca",
+  "production_started_at": "2026-10-24T11:23:10.097977088Z",
+  "candidate_container_id": "c51a602699cd798800bce28bc204153bddcea5f5f8aa1ae43291a9e294cb5197",
+  "candidate_image_id": "sha256:aa511830842a774c5143344ed719b6abff2aa950befbbce3ce501991ba071be5",
+  "candidate_repo_digests": [
+    "libretv-security@sha256:aa511830842a774c5143344ed719b6abff2aa950befbbce3ce501991ba071be5"
+  ],
+  "candidate_image_architecture": "amd64",
+  "candidate_image_created": "2026-11-10T14:25:29.05650173Z",
+  "candidate_port": "127.0.0.1:18081",
+  "candidate_tls": "127.0.0.1:18443",
+  "candidate_mounts": [],
+  "candidate_env_keys": [
+    "DEFAULT_SOURCES",
+    "DEFAULT_RECOMMEND_SOURCE",
+    "PASSWORD",
+    "COOKIE_SECURE",
+    "NEXT_TELEMETRY_DISABLED",
+    "NODE_ENV"
+  ],
+  "live_allow_private": "unset",
+  "password": "separate fixture; production password unchanged",
+  "cert_sha256": "016e8779e596d7f6b850f1895d99a1760ea83ca77c53c6a19233ac52acb9ec76",
+  "tls_proxy_pid": 366594
+}

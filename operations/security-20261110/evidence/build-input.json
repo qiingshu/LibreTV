@@ -1,0 +1,12 @@
+{
+  "upstream_revision": "b08c8242d2a3cdb4309b40c58001c69c04593ce1",
+  "patch_sha256": "3bbad6b596a3c60d63e5bd2db314aee5def8fd941c03ae7e421a6b019d754ce1",
+  "build_archive_sha256": "206c5c029b4d5e0ecdd1260afe4e8b3ba0e7d5ce53dbed44c1ac7493fb4f5e69",
+  "candidate_image_id": "sha256:aa511830842a774c5143344ed719b6abff2aa950befbbce3ce501991ba071be5",
+  "source_hashes": {
+    "package.json": "2815aad96dc30dfb34648b6085959aa47de15cf2f3888c3ab2be82feddbaa06a",
+    "package-lock.json": "081aed3f1aaeddfcb895e3ce629e88e03451a68cc7771d6e904fc57d03f48862",
+    "src/lib/ssrf.ts": "1b1d09d1c2ebbc19222c0c096e5440949cfe2368a624e46dcc57c13913e6ed82",
+    "src/lib/fetch-utils.ts": "d2fddc08548360568322bfe74c9ba73576d397cfcf6711504ad65aa9567db98a"
+  }
+}

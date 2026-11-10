@@ -1,0 +1,23 @@
+
+> libretv@2.21.0 test
+> vitest run --maxWorkers=2 --minWorkers=1 src/lib/ssrf-isolated.test.ts src/lib/proxy-regression.test.ts src/lib/ssrf.test.ts src/lib/fetch-utils.test.ts src/lib/auth.test.ts src/app/api/search/route.test.ts src/lib/playback-recovery.test.ts src/lib/m3u8.test.ts src/app/api/live/probe/route.test.ts
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /root/Documents/Codex/2026-11-10/a-b-c-pr-fork-a/libretv-candidate
+
+ ✓ src/lib/m3u8.test.ts (22 tests) 24ms
+ ✓ src/app/api/live/probe/route.test.ts (12 tests) 180ms
+ ✓ src/lib/auth.test.ts (13 tests) 4ms
+ ✓ src/app/api/search/route.test.ts (8 tests) 135ms
+ ✓ src/lib/playback-recovery.test.ts (10 tests) 6ms
+ ✓ src/lib/ssrf-isolated.test.ts (19 tests) 139ms
+ ✓ src/lib/proxy-regression.test.ts (5 tests) 49ms
+ ✓ src/lib/fetch-utils.test.ts (6 tests) 8ms
+ ✓ src/lib/ssrf.test.ts (32 tests) 5ms
+
+ Test Files  9 passed (9)
+      Tests  127 passed (127)
+   Start at  20:12:33
+   Duration  2.57s (transform 552ms, setup 0ms, collect 1.26s, tests 550ms, environment 1ms, prepare 898ms)
+

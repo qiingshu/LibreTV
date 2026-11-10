@@ -1,0 +1,21 @@
+[
+  {
+    "step": "rollback original image on candidate port only",
+    "image_id": "sha256:009fbfba569032ea38efc07b5f7ec51724e0e14a4b7a27a2848774e2323992ca",
+    "container_id": "245a8e8ae7cd67ea6c622d1fcbc8159bb3faf50d4856906c5a50eb7a0a81d5b8",
+    "https_fixture_login": true
+  },
+  {
+    "step": "restore revised candidate image on candidate port only",
+    "image_id": "sha256:aa511830842a774c5143344ed719b6abff2aa950befbbce3ce501991ba071be5",
+    "container_id": "fe509e7341c72e98e3b258040c41837d7bf2df4749352e01be8038da54af4ded",
+    "https_fixture_login": true
+  },
+  {
+    "step": "production guard",
+    "container_id": "2f50cd1231f316fbb75bf03ea7714e1d455924a1a434399463ec47a8fd937080",
+    "image_id": "sha256:009fbfba569032ea38efc07b5f7ec51724e0e14a4b7a27a2848774e2323992ca",
+    "started_at": "2026-10-24T11:23:10.097977088Z",
+    "unchanged": true
+  }
+]
