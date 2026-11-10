@@ -33,8 +33,8 @@ describe('isolated connection and exemption regression', () => {
       expect(hits).toEqual([]);
     });
   });
-  it('LIVE flag absent does not turn live intent into a connection exemption', async () => {
-    vi.stubEnv('LIVE_ALLOW_PRIVATE', '');
+  it.each(['', '0', 'false', 'true'])('LIVE flag %j does not enable a private connection exemption', async flag => {
+    vi.stubEnv('LIVE_ALLOW_PRIVATE', flag);
     await fixture(async (url, hits) => {
       await expect(runWithSSRFProtection({ allowPrivate: true }, () => fetch(url))).rejects.toMatchObject({ cause: { code: 'ERR_SSRF_BLOCKED' } });
       await expect(fetchUpstream(url, { allowPrivate: true, safeRedirects: false })).rejects.toThrow(/连接目标被拒绝/);
@@ -55,4 +55,29 @@ describe('isolated connection and exemption regression', () => {
     vi.mocked(lookup).mockImplementation(((_host: unknown, _opts: unknown, cb: (err: null, addresses: unknown[]) => void) => cb(null, [{ address: '8.8.8.8', family: 4 }, { address: '::1', family: 6 }])) as never);
     await expect(runWithSSRFProtection({}, () => fetch('http://mixed.invalid/'))).rejects.toMatchObject({ cause: { code: 'ERR_SSRF_BLOCKED' } });
   });
+});
+
+// A server-controlled redirect can stream forever; following it must not leak a socket.
+it('cancels an infinite 302 body and keeps final delayed body readable', async () => {
+  vi.stubEnv('LIVE_ALLOW_PRIVATE', '1');
+  let redirectClosed = false;
+  let closeResolve: () => void = () => {};
+  const closed = new Promise<void>(r => { closeResolve = r; });
+  const server = http.createServer((req, res) => {
+    if (req.url === '/infinite') {
+      res.writeHead(302, { location: '/final' }); res.write('never-ending-redirect');
+      const timer = setInterval(() => res.write('more'), 10);
+      res.on('close', () => { clearInterval(timer); redirectClosed = true; closeResolve(); });
+    } else {
+      res.writeHead(200); res.write('first-'); setTimeout(() => res.end('last'), 30);
+    }
+  });
+  await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const port = (server.address() as import('node:net').AddressInfo).port;
+    const {res} = await fetchWithSafeRedirects(`http://127.0.0.1:${port}/infinite`, {}, {allowPrivate:true});
+    await Promise.race([closed, new Promise((_, reject) => setTimeout(() => reject(Error('redirect connection not released')), 500))]);
+    expect(redirectClosed).toBe(true);
+    expect(await res.text()).toBe('first-last');
+  } finally { server.closeAllConnections(); await new Promise<void>(r => server.close(() => r())); }
 });

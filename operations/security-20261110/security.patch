@@ -70,7 +70,7 @@ index 0d79a26..4f3a2a7 100644
 +  });
  });
 diff --git a/src/lib/fetch-utils.ts b/src/lib/fetch-utils.ts
-index 8a40faf..ce6571f 100644
+index 8a40faf..173a2b0 100644
 --- a/src/lib/fetch-utils.ts
 +++ b/src/lib/fetch-utils.ts
 @@ -1,6 +1,6 @@
@@ -105,7 +105,7 @@ index 8a40faf..ce6571f 100644
  /**
   * 手动逐跳跟随重定向，每一跳重新执行 SSRF 校验。
   * 不能用 redirect:'follow'——预检之后 fetch 自动跟随的 3xx 可把请求
-@@ -52,33 +69,37 @@ export async function fetchWithSafeRedirects(
+@@ -52,33 +69,39 @@ export async function fetchWithSafeRedirects(
    options: SafeRedirectOptions = {}
  ): Promise<FetchResult> {
    const { allowPrivate = false, headerTimeoutMs } = options;
@@ -155,6 +155,8 @@ index 8a40faf..ce6571f 100644
 +      if (!REDIRECT_STATUSES.has(res.status)) return { res, finalUrl: current };
 +      const location = res.headers.get('location');
 +      if (!location) return { res, finalUrl: current };
++      // A redirect body may never finish; cancel it before opening the next hop.
++      await res.body?.cancel();
 +      current = new URL(location, current).href;
      }
 -    if (!REDIRECT_STATUSES.has(res.status)) return { res, finalUrl: current };
@@ -168,7 +170,7 @@ index 8a40faf..ce6571f 100644
  }
  
  export async function fetchUpstream(url: string, options: FetchOptions = {}): Promise<Response> {
-@@ -97,12 +118,18 @@ export async function fetchUpstreamWithMeta(url: string, options: FetchOptions =
+@@ -97,12 +120,18 @@ export async function fetchUpstreamWithMeta(url: string, options: FetchOptions =
    for (let attempt = 0; attempt <= retries; attempt++) {
      try {
        if (!safeRedirects) {
@@ -243,10 +245,10 @@ index 0000000..707317a
 +});
 diff --git a/src/lib/ssrf-isolated.test.ts b/src/lib/ssrf-isolated.test.ts
 new file mode 100644
-index 0000000..4ed66d0
+index 0000000..e911745
 --- /dev/null
 +++ b/src/lib/ssrf-isolated.test.ts
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,83 @@
 +import { afterEach, describe, expect, it, vi } from 'vitest';
 +import http from 'node:http';
 +import dns from 'node:dns/promises';
@@ -282,8 +284,8 @@ index 0000000..4ed66d0
 +      expect(hits).toEqual([]);
 +    });
 +  });
-+  it('LIVE flag absent does not turn live intent into a connection exemption', async () => {
-+    vi.stubEnv('LIVE_ALLOW_PRIVATE', '');
++  it.each(['', '0', 'false', 'true'])('LIVE flag %j does not enable a private connection exemption', async flag => {
++    vi.stubEnv('LIVE_ALLOW_PRIVATE', flag);
 +    await fixture(async (url, hits) => {
 +      await expect(runWithSSRFProtection({ allowPrivate: true }, () => fetch(url))).rejects.toMatchObject({ cause: { code: 'ERR_SSRF_BLOCKED' } });
 +      await expect(fetchUpstream(url, { allowPrivate: true, safeRedirects: false })).rejects.toThrow(/连接目标被拒绝/);
@@ -304,6 +306,31 @@ index 0000000..4ed66d0
 +    vi.mocked(lookup).mockImplementation(((_host: unknown, _opts: unknown, cb: (err: null, addresses: unknown[]) => void) => cb(null, [{ address: '8.8.8.8', family: 4 }, { address: '::1', family: 6 }])) as never);
 +    await expect(runWithSSRFProtection({}, () => fetch('http://mixed.invalid/'))).rejects.toMatchObject({ cause: { code: 'ERR_SSRF_BLOCKED' } });
 +  });
++});
++
++// A server-controlled redirect can stream forever; following it must not leak a socket.
++it('cancels an infinite 302 body and keeps final delayed body readable', async () => {
++  vi.stubEnv('LIVE_ALLOW_PRIVATE', '1');
++  let redirectClosed = false;
++  let closeResolve: () => void = () => {};
++  const closed = new Promise<void>(r => { closeResolve = r; });
++  const server = http.createServer((req, res) => {
++    if (req.url === '/infinite') {
++      res.writeHead(302, { location: '/final' }); res.write('never-ending-redirect');
++      const timer = setInterval(() => res.write('more'), 10);
++      res.on('close', () => { clearInterval(timer); redirectClosed = true; closeResolve(); });
++    } else {
++      res.writeHead(200); res.write('first-'); setTimeout(() => res.end('last'), 30);
++    }
++  });
++  await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
++  try {
++    const port = (server.address() as import('node:net').AddressInfo).port;
++    const {res} = await fetchWithSafeRedirects(`http://127.0.0.1:${port}/infinite`, {}, {allowPrivate:true});
++    await Promise.race([closed, new Promise((_, reject) => setTimeout(() => reject(Error('redirect connection not released')), 500))]);
++    expect(redirectClosed).toBe(true);
++    expect(await res.text()).toBe('first-last');
++  } finally { server.closeAllConnections(); await new Promise<void>(r => server.close(() => r())); }
 +});
 diff --git a/src/lib/ssrf-public-fixture.test.ts b/src/lib/ssrf-public-fixture.test.ts
 new file mode 100644

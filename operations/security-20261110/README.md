@@ -34,3 +34,15 @@ Candidate recovery: stop only Compose project libretv-security-candidate-2026111
 If a future authorized release fails: restore only the backed-up production Compose image reference to the exact original digest above, retain the unchanged environment file and 127.0.0.1:18080 binding, and recreate only the web service with --no-deps --no-build --pull never. No compose down, no production directory deletion, no Nginx/DNS change and no browser storage clearing. Original image must be retained and verified locally before the release. Check status, authentication, search, proxy/HLS Range and playback after rollback. This is a reversible code-only change with no migrations.
 
 Remaining limits: Docker image build/runtime on the target host and actual device/media decoding acceptance remain release-stage checks; local Next candidate runtime and related fixtures provide the current evidence. This PR must not be treated as a production deployment.
+
+## 本轮复核修正（2026-11-10）
+
+按用户汇总的两家复核意见，只修此次增量：逐跳前 await res.body?.cancel()；无限302 body回归确认上跳连接释放且最终延迟body可读。LIVE_ALLOW_PRIVATE的0/false/true字符串均不放行；保持精确1门槛。35项关联定向测试通过。NAT64/6to4等特殊路由分类留作后续事项，本轮不临时引入复杂解析改造。
+
+已读取远端PR中的build-final.txt完整成功结尾，并按文件实际字节计算哈希；本轮该文件现更新为目标主机最终完整Docker构建日志。SHA256SUMS由本机实际文件重算，不采用审查方给出的常量、不删任何校验。prepare.sh已在独立干净Git提交中从头通过哈希校验、上游克隆、固定revision及补丁应用，证据prepare.txt；交付后另从最终PR干净检出复验，结果保存在本地交接材料。
+
+目标主机/独立目录：vps-bfd15009，/opt/libretv-security-20261110-r2。独立容器libretv-security-review2，127.0.0.1:18081；独立Python TLS验证入口127.0.0.1:18443，经SSH隧道访问；未改生产Nginx。候选使用独立夹具密码和原片源配置，无挂载，LIVE_ALLOW_PRIVATE仍未设置，COOKIE_SECURE=true；生产密码/配置均未改。候选镜像ID sha256:aa511830842a774c5143344ed719b6abff2aa950befbbce3ce501991ba071be5，实际RepoDigests见target-candidate.json，未向注册表推送。build-input.json固定源补丁/构建输入与镜像的关系。
+
+正常请求验收：独立HTTPS入口以候选证书作为信任根并校验主机名；正常公网HTTPS片源/媒体由候选的默认TLS证书校验处理，无公网漏洞探测。登录、HLS、Range206、提前关闭媒体body、关闭后Range读取通过。浏览器上下文接受独立自签候选证书（该步骤不是公信CA验证），实际影片1920×800，4.5秒内解码帧27→135、时间1.009→5.525；暂停/恢复与AbortController取消通过。证据media-results.json/browser-results.json。
+
+已在候选容器/端口上实际演练：原2.21.0镜像→HTTPS夹具登录成功→恢复修正候选镜像→HTTPS夹具登录成功。生产容器ID、镜像、启动时间、127.0.0.1:18080绑定完全不变，证据rollback-rehearsal.json。恢复目标仍是原生产digest，不恢复旧fork。没有生产切换或部署。该结果替代上文“目标主机尚未构建/媒体解码未验收”的历史限制；实际iPhone真机与正式生产发布仍未执行。

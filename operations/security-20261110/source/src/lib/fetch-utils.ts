@@ -96,6 +96,8 @@ export async function fetchWithSafeRedirects(
       if (!REDIRECT_STATUSES.has(res.status)) return { res, finalUrl: current };
       const location = res.headers.get('location');
       if (!location) return { res, finalUrl: current };
+      // A redirect body may never finish; cancel it before opening the next hop.
+      await res.body?.cancel();
       current = new URL(location, current).href;
     }
     throw new Error('重定向次数过多');

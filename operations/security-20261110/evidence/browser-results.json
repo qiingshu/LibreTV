@@ -1,0 +1,36 @@
+[
+  {
+    "name": "browser login on target candidate",
+    "passed": true
+  },
+  {
+    "name": "normal target-image HLS playback actually decodes frames",
+    "passed": true,
+    "before": {
+      "time": 1.009261,
+      "width": 1920,
+      "height": 800,
+      "frames": 27,
+      "paused": false,
+      "readyState": 4
+    },
+    "after": {
+      "time": 5.524863,
+      "width": 1920,
+      "height": 800,
+      "frames": 135,
+      "paused": false,
+      "readyState": 4
+    }
+  },
+  {
+    "name": "pause and resume",
+    "passed": true
+  },
+  {
+    "name": "normal media fetch AbortController cancellation",
+    "passed": true,
+    "bytes": 32768,
+    "error": "AbortError"
+  }
+]

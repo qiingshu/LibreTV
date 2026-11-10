@@ -1,3 +1,58 @@
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon  1.699MB
+
+Step 1/21 : FROM node:22-alpine AS builder
+22-alpine: Pulling from library/node
+071409a40254: Pulling fs layer
+2a9491572f6e: Pulling fs layer
+881fc932939e: Pulling fs layer
+df11f9b3da94: Pulling fs layer
+df11f9b3da94: Download complete
+071409a40254: Download complete
+881fc932939e: Download complete
+881fc932939e: Pull complete
+7c45a740a45c: Download complete
+2a9491572f6e: Download complete
+aed853a20b91: Download complete
+2a9491572f6e: Pull complete
+df11f9b3da94: Pull complete
+071409a40254: Pull complete
+Digest: sha256:0e1754758c2df4cfa3e68d59e2e1b7374bb7fd9ea6328eaaacf15cc934af8202
+Status: Downloaded newer image for node:22-alpine
+ ---> 0e1754758c2d
+Step 2/21 : WORKDIR /app
+ ---> Running in 8acff7b9ce58
+ ---> Removed intermediate container 8acff7b9ce58
+ ---> e1eaec19aee3
+Step 3/21 : COPY package.json package-lock.json* ./
+ ---> 7ad87cede4ae
+Step 4/21 : RUN npm ci --no-audit --no-fund
+ ---> Running in f05239bc5a23
+[91mnpm warn deprecated eslint@9.39.5: This version is no longer supported. Please see https://eslint.org/version-support for other options.
+[0m
+added 420 packages in 23s
+[91mnpm notice
+npm notice New major version of npm available! 10.9.9 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice
+[0m ---> Removed intermediate container f05239bc5a23
+ ---> 38aa6d9429be
+Step 5/21 : COPY . .
+ ---> 67b657f96dd6
+Step 6/21 : ENV DOCKER_BUILD=1
+ ---> Running in 54e29520224e
+ ---> Removed intermediate container 54e29520224e
+ ---> 418670804a0f
+Step 7/21 : ENV NEXT_TELEMETRY_DISABLED=1
+ ---> Running in e51302988a02
+ ---> Removed intermediate container e51302988a02
+ ---> d9b48099991a
+Step 8/21 : RUN npm run build
+ ---> Running in 257ba4e0a3c3
 
 > libretv@2.21.0 build
 > next build
@@ -5,7 +60,7 @@
    ▲ Next.js 15.5.26
 
    Creating an optimized production build ...
- ✓ Compiled successfully in 19.7s
+ ✓ Compiled successfully in 33.6s
    Linting and checking validity of types ...
    Collecting page data ...
    Generating static pages (0/20) ...
@@ -18,7 +73,7 @@
 
 Route (app)                                 Size  First Load JS
 ┌ ○ /                                    10.9 kB         235 kB
-├ ○ /_not-found                            992 B         103 kB
+├ ○ /_not-found                            991 B         103 kB
 ├ ○ /about                               2.65 kB         223 kB
 ├ ƒ /api/auth                              167 B         103 kB
 ├ ƒ /api/bangumi/calendar                  167 B         103 kB
@@ -50,3 +105,50 @@ Route (app)                                 Size  First Load JS
 ○  (Static)   prerendered as static content
 ƒ  (Dynamic)  server-rendered on demand
 
+ ---> Removed intermediate container 257ba4e0a3c3
+ ---> 96e724491ae4
+Step 9/21 : FROM node:22-alpine AS runner
+ ---> 0e1754758c2d
+Step 10/21 : WORKDIR /app
+ ---> Using cache
+ ---> e1eaec19aee3
+Step 11/21 : ENV NODE_ENV=production
+ ---> Running in d6be346888d0
+ ---> Removed intermediate container d6be346888d0
+ ---> a54539820ce8
+Step 12/21 : ENV NEXT_TELEMETRY_DISABLED=1
+ ---> Running in db69727fdd2c
+ ---> Removed intermediate container db69727fdd2c
+ ---> 7b0099ef3b5f
+Step 13/21 : ENV PORT=8080
+ ---> Running in 6d56c304cb11
+ ---> Removed intermediate container 6d56c304cb11
+ ---> 4e8c9699769f
+Step 14/21 : ENV HOSTNAME=0.0.0.0
+ ---> Running in b0f869083c43
+ ---> Removed intermediate container b0f869083c43
+ ---> f8ca5ad5d2d5
+Step 15/21 : RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
+ ---> Running in 5013c4df9886
+ ---> Removed intermediate container 5013c4df9886
+ ---> 88a777d26c63
+Step 16/21 : COPY --from=builder /app/.next/standalone ./
+ ---> 937a27046bc2
+Step 17/21 : COPY --from=builder /app/.next/static ./.next/static
+ ---> b2ab38782df2
+Step 18/21 : COPY --from=builder /app/public ./public
+ ---> a6e01b3a4c95
+Step 19/21 : USER nextjs
+ ---> Running in 5cc7a8866882
+ ---> Removed intermediate container 5cc7a8866882
+ ---> 806b7f7fb4eb
+Step 20/21 : EXPOSE 8080
+ ---> Running in 26c279c7f3fe
+ ---> Removed intermediate container 26c279c7f3fe
+ ---> a69ca9a46786
+Step 21/21 : CMD ["node", "server.js"]
+ ---> Running in d246e5e010c1
+ ---> Removed intermediate container d246e5e010c1
+ ---> aa511830842a
+Successfully built aa511830842a
+Successfully tagged libretv-security:2210-review2

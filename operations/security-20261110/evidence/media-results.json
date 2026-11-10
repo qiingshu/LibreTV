@@ -1,0 +1,42 @@
+[
+  {
+    "name": "candidate HTTPS login",
+    "passed": true,
+    "certificate_validation": "trusted candidate certificate; hostname verified"
+  },
+  {
+    "name": "session verified",
+    "passed": true
+  },
+  {
+    "name": "HTTPS source detail",
+    "passed": true,
+    "source_host": "cj.rycjapi.com"
+  },
+  {
+    "name": "upstream HTTPS media",
+    "passed": true
+  },
+  {
+    "name": "HLS manifest stream read",
+    "passed": true,
+    "bytes": 175
+  },
+  {
+    "name": "HLS segment Range",
+    "passed": true,
+    "status": 206,
+    "content_range": "bytes 0-1023/1121608",
+    "bytes": 1024
+  },
+  {
+    "name": "normal media stream cancellation",
+    "passed": true,
+    "bytes_read": 8192,
+    "operation": "close response before EOF"
+  },
+  {
+    "name": "Range remains usable after cancel",
+    "passed": true
+  }
+]

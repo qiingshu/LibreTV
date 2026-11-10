@@ -1,0 +1,22 @@
+README.md: OK
+compose.candidate.yaml: OK
+evidence/build-final.txt: OK
+evidence/connection-tests.txt: OK
+evidence/production-baseline.json: OK
+evidence/public-fixture-test.txt: OK
+evidence/revision-tests.txt: OK
+evidence/runtime.json: OK
+evidence/tests-final.txt: OK
+evidence/typecheck-final.txt: OK
+prepare.sh: OK
+security.patch: OK
+source/package-lock.json: OK
+source/package.json: OK
+source/src/lib/fetch-utils.test.ts: OK
+source/src/lib/fetch-utils.ts: OK
+source/src/lib/proxy-regression.test.ts: OK
+source/src/lib/ssrf-isolated.test.ts: OK
+source/src/lib/ssrf-public-fixture.test.ts: OK
+source/src/lib/ssrf.ts: OK
+Cloning into 'candidate-source'...
+HEAD is now at b08c824 2.21.0
